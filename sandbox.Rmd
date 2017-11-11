@@ -1,0 +1,104 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+set.seed(03031988)
+library(data.table)
+
+# Comment this out when data does not need to be reloaded
+# rm(train)
+
+if (!exists('train')) { train <- data.table(read.csv('train.csv', na.strings="-1")) }
+if (!exists('test')) { test <- data.table(read.csv('test.csv', na.strings="-1")) }
+
+```
+
+## Data transformation
+Info from the Kaggle page:
+* The **_bin** suffix means that it is a dummy variable. 
+* The **_cat** suffix means that it is a categorical value.
+* **-1** means that the value is missing. This has already been taken care of when loading the data.
+
+```{r}
+# Transform categorical values - train
+cols <- grep("\\_cat",names(train),value=T)
+train[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
+# train[cols] <- lapply(train[cols],as.factor)
+
+
+# Transform boolean values - train (also target)
+cols <- grep("\\_bin|train",names(train),value=T)
+train[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
+
+# Transform categorical values - test
+cols <- grep("\\_cat",names(train),value=T)
+test[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
+
+# Transform boolean values - test
+cols <- grep("\\_bin",names(train),value=T)
+test[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
+
+rm(cols)
+
+# Remove id
+train <- subset(train,select=c(-id))
+test <- subset(test,select=c(-id))
+```
+
+## Exploratory analysis
+
+```{r}
+names(train)
+str(train)
+dim(train)
+```
+
+How many complete rows are there?
+```{r}
+# Absolute
+nrow(train[complete.cases(train),])
+# Relative
+nrow(train[complete.cases(train),]) / nrow(train)
+```
+
+## Sampling for computing speed
+```{r}
+# For computing speed purposes, code is written by testing it on a 10k non-missing data record data set.
+# Uncomment the next line to work with a sample.
+train <- train[sample(nrow(train[complete.cases(train),]),10000,replace=F),]
+```
+
+## Fitting all variables
+```{r}
+lmAll <- glm(target~.,data=train)
+summary(lmAll)
+```
+
+## Subset selection
+
+### Filter method
+Here is a correlation matrix.
+```{r}
+cor(train)
+```
+
+### Wrapper method
+
+We can use the bestglm package to find out the best variables for each n where n is the amount of predictors.
+This is slow as hell because it is a huge data set, even when sampled, as it has 2^57 models.
+
+```{r}
+library(bestglm)
+# lmReg <- regsubsets(target~.,data=train,nvmax=57,really.big=T)
+```
+
+What about forward and backward selection.
+```{r}
+# Backward
+lmBwd <- regsubsets(target~.,data=train,method="backward")
+```
+
+### Embedded methods
