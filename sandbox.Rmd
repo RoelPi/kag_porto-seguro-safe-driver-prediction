@@ -45,7 +45,9 @@ rm(cols)
 
 # Remove id
 train <- subset(train,select=c(-id))
-test <- subset(test,select=c(-id))
+
+# Make backup of train
+trainBackup <- train
 ```
 
 ## Exploratory analysis
@@ -64,16 +66,6 @@ nrow(train[complete.cases(train),])
 nrow(train[complete.cases(train),]) / nrow(train)
 ```
 
-## Sampling
-```{r}
-# For computing speed purposes, code is written by testing it on a 10k non-missing data record data set.
-
-# Uncomment next line to work with complete rows only
-train <- train[complete.cases(train),]
-# Uncomment the next line to work with a sample of 10k rows.
-train <- train[sample(nrow(train),size = 10000,replace = F),]
-```
-
 ## Fitting all variables
 ```{r}
 lmAll <- glm(target~.,data=train)
@@ -83,13 +75,21 @@ summary(lmAll)
 ## Subset selection
 
 ### Filter method
-Here is a correlation matrix.
+#### Correlation matrix
+Here is a correlation matrix. The following variables are highly correlated (arbitrary cutoff at 0.6):
+* **ps_ind_14** and ps_ind_12_bin
+* ps_reg_01 and ps_reg_03
+* ps_car_13 and ps_car_12
+* ps_ind_17_bin and ps_ind_16_bin
+* **ps_ind_14** and ps_ind_11_bin
+
 ```{r}
 # Remove categorical and target column
 cols <- grep("\\_cat|target",names(train),value=T,invert=T)
 
 # Generate correlation matrix with absolute value of correlation
 corMatrixWide <- abs(cor(train[,..cols]))
+
 
 # Convert correlation matrix to long format
 corMatrixLong <- data.table(melt(corMatrixWide))
@@ -103,11 +103,27 @@ corMatrixLong <- corMatrixLong[order(-value),]
 # Remove dupes (DANGER - what if different covariates have same correlation coefficient?)
 corMatrixLong <- corMatrixLong[-seq(0,nrow(corMatrixLong),2),]
 
-rm(cols)
+# Remove highly correlated values
+abundantFeatures <- as.character(unique(corMatrixLong[value > 0.6,]$Var2))
+trainF <- train[, (abundantFeatures) := NULL]
 
+rm(cols)
+rm(abundantFeatures)
 ```
 
+#### Decision trees
+
+
 ### Wrapper method
+
+## Sampling
+```{r}
+# For computing speed purposes, code is written by testing it on a 10k non-missing data record data set.
+# Uncomment next line to work with complete rows only
+train <- train[complete.cases(train),]
+# Uncomment the next line to work with a sample of 10k rows.
+train <- train[sample(nrow(train),size = 10000,replace = F),]
+```
 
 We can use the bestglm or regsubsets package to find out the best variables for each n where n is the amount of predictors. This is slow as hell because it is a huge data set, even when sampled, as it has 2^57 models.
 
