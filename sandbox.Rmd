@@ -72,8 +72,7 @@ lmAll <- glm(target~.,data=train)
 summary(lmAll)
 ```
 
-## Subset selection
-
+## Feature selection
 ### Filter method
 #### Correlation matrix
 Here is a correlation matrix. The following variables are highly correlated (arbitrary cutoff at 0.6):
@@ -112,7 +111,10 @@ rm(abundantFeatures)
 ```
 
 #### Decision trees
-
+```{r}
+library(rpart)
+trainTree <- rpart(target~.,data=trainF,method='class',control=rpart.control(minsplit=10000,cp=0.01))
+```
 
 ### Wrapper method
 
