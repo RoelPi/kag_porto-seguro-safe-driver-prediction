@@ -52,10 +52,21 @@ trainBackup <- train
 
 ## Exploratory analysis
 
+The fact that the claim rate is very low can make the prediction very hard. The _specificity_ will probably be very high, but the _sensitivity_ won't be.
+
 ```{r}
-names(train)
-str(train)
+# Dimensions of the data frame
 dim(train)
+
+# Names of the variables
+names(train)
+
+# Summary and overview of the data
+str(train)
+
+# What is the claim rate?
+sum(train$target) / nrow(train)
+
 ```
 
 How many complete rows are there?
@@ -112,7 +123,7 @@ rm(abundantFeatures)
 ```
 
 #### Decision trees
-To find the most important features, we can use decision trees. However, the algorithm does not appear to find any significant features as it is only producing a root.
+To find the most important features, we can use decision trees. However, the algorithm does not appear to find any significant features as it is only producing a root. Which is very problematic because decision trees are generally a good way to classify imbalanced classes.
 
 ```{r}
 library(rpart)
