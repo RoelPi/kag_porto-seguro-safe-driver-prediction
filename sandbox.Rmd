@@ -30,7 +30,7 @@ train[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
 
 
 # Transform boolean values - train (also target)
-cols <- grep("\\_bin|train",names(train),value=T)
+cols <- grep("\\_bin|target",names(train),value=T)
 train[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
 
 # Transform categorical values - test
@@ -87,11 +87,10 @@ cor(train)
 
 ### Wrapper method
 
-We can use the bestglm package to find out the best variables for each n where n is the amount of predictors.
-This is slow as hell because it is a huge data set, even when sampled, as it has 2^57 models.
+We can use the bestglm or regsubsets package to find out the best variables for each n where n is the amount of predictors. This is slow as hell because it is a huge data set, even when sampled, as it has 2^57 models.
 
 ```{r}
-library(bestglm)
+library(regsubsets)
 # lmReg <- regsubsets(target~.,data=train,nvmax=57,really.big=T)
 ```
 
