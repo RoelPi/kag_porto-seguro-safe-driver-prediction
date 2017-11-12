@@ -106,19 +106,53 @@ corMatrixLong <- corMatrixLong[-seq(0,nrow(corMatrixLong),2),]
 abundantFeatures <- as.character(unique(corMatrixLong[value > 0.6,]$Var2))
 trainF <- train[, (abundantFeatures) := NULL]
 
+# Clean up
 rm(cols)
 rm(abundantFeatures)
 ```
 
 #### Decision trees
+To find the most important features, we can use decision trees. However, the algorithm does not appear to find any significant features as it is only producing a root.
+
 ```{r}
 library(rpart)
-trainTree <- rpart(target~.,data=trainF,method='class',control=rpart.control(minsplit=10000,cp=0.01))
+# trainTree <- rpart(target~.,data=trainF,method='class',control=rpart.control(minsplit=1, minbucket=1, cp=0.001))
+# plot(trainTree)
+```
+
+### Individual logit regression
+In the following section, I run a bivariate logit regression for every variable to determine the importance of each variable individually.
+
+```{r}
+glmVars <- data.table(variable = character(),AIC=integer(),deviance=integer(),p=integer())
+for (i in 2:ncol(trainF)) {
+    v <- names(trainF)[i]
+    model <- glm(formula(paste("target~",v)),family="binomial",data=trainF)
+    modelSum <- summary(model)
+    newrow <- data.table(variable=v,AIC=modelSum$aic,deviance=modelSum$deviance,p=modelSum$coefficients[8])
+    glmVars <- rbind(glmVars,newrow)
+}
+glmVars <- glmVars[order(deviance),]
+
+# Clean up
+rm(model)
+rm(modelSum)
+rm(newrow)
+rm(v)
+```
+
+In the next section I try to build logit models starting from the two most important features from the previous section (if they are not correlated/similar).
+```{r}
+# First I should calculate simmilarity between the two categorical variables
+
+
+# Then run the regression and do a forward stepwise function.
+glmSelection <- glm(target ~ ps_car_03_cat + ps_car_05_cat)
 ```
 
 ### Wrapper method
 
-## Sampling
+#### Sampling
 ```{r}
 # For computing speed purposes, code is written by testing it on a 10k non-missing data record data set.
 # Uncomment next line to work with complete rows only
