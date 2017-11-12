@@ -9,7 +9,7 @@ set.seed(03031988)
 library(data.table)
 
 # Comment this out when data does not need to be reloaded
-# rm(train)
+rm(train)
 
 if (!exists('train')) { train <- data.table(read.csv('train.csv', na.strings="-1")) }
 if (!exists('test')) { test <- data.table(read.csv('test.csv', na.strings="-1")) }
@@ -64,11 +64,14 @@ nrow(train[complete.cases(train),])
 nrow(train[complete.cases(train),]) / nrow(train)
 ```
 
-## Sampling for computing speed
+## Sampling
 ```{r}
 # For computing speed purposes, code is written by testing it on a 10k non-missing data record data set.
-# Uncomment the next line to work with a sample.
-train <- train[sample(nrow(train[complete.cases(train),]),10000,replace=F),]
+
+# Uncomment next line to work with complete rows only
+train <- train[complete.cases(train),]
+# Uncomment the next line to work with a sample of 10k rows.
+train <- train[sample(nrow(train),size = 10000,replace = F),]
 ```
 
 ## Fitting all variables
@@ -82,7 +85,26 @@ summary(lmAll)
 ### Filter method
 Here is a correlation matrix.
 ```{r}
-cor(train)
+# Remove categorical and target column
+cols <- grep("\\_cat|target",names(train),value=T,invert=T)
+
+# Generate correlation matrix with absolute value of correlation
+corMatrixWide <- abs(cor(train[,..cols]))
+
+# Convert correlation matrix to long format
+corMatrixLong <- data.table(melt(corMatrixWide))
+
+# Remove self-correlation rows
+corMatrixLong <- corMatrixLong[Var1 != Var2]
+
+# Order from highly-correlate to not correlatied
+corMatrixLong <- corMatrixLong[order(-value),]
+
+# Remove dupes (DANGER - what if different covariates have same correlation coefficient?)
+corMatrixLong <- corMatrixLong[-seq(0,nrow(corMatrixLong),2),]
+
+rm(cols)
+
 ```
 
 ### Wrapper method
