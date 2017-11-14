@@ -70,11 +70,19 @@ sum(train$target) / nrow(train)
 ```
 
 How many complete rows are there?
+
+There is also quite a lot of rows which contain NA's. 
 ```{r}
 # Absolute
 nrow(train[complete.cases(train),])
 # Relative
 nrow(train[complete.cases(train),]) / nrow(train)
+
+# For computing speed purposes, code is written by testing it on a 10k non-missing data record data set.
+# Uncomment next line to work with complete rows only
+train <- train[complete.cases(train),]
+# Uncomment the next line to work with a sample of 10k rows.
+train <- train[sample(nrow(train),size = 10000,replace = F),]
 ```
 
 ## Fitting all variables
@@ -131,8 +139,8 @@ library(rpart)
 # plot(trainTree)
 ```
 
-### Individual logit regression
-In the following section, I run a bivariate logit regression for every variable to determine the importance of each variable individually.
+#### Individual logit regression
+In the following section, I run a bivariate logit regression for every variable to determine the importance of each variable individually. This also turns out not to be very informative.
 
 ```{r}
 glmVars <- data.table(variable = character(),AIC=integer(),deviance=integer(),p=integer())
@@ -152,25 +160,7 @@ rm(newrow)
 rm(v)
 ```
 
-In the next section I try to build logit models starting from the two most important features from the previous section (if they are not correlated/similar).
-```{r}
-# First I should calculate simmilarity between the two categorical variables
-
-
-# Then run the regression and do a forward stepwise function.
-glmSelection <- glm(target ~ ps_car_03_cat + ps_car_05_cat)
-```
-
 ### Wrapper method
-
-#### Sampling
-```{r}
-# For computing speed purposes, code is written by testing it on a 10k non-missing data record data set.
-# Uncomment next line to work with complete rows only
-train <- train[complete.cases(train),]
-# Uncomment the next line to work with a sample of 10k rows.
-train <- train[sample(nrow(train),size = 10000,replace = F),]
-```
 
 We can use the bestglm or regsubsets package to find out the best variables for each n where n is the amount of predictors. This is slow as hell because it is a huge data set, even when sampled, as it has 2^57 models.
 
@@ -179,10 +169,25 @@ library(regsubsets)
 # lmReg <- regsubsets(target~.,data=train,nvmax=57,really.big=T)
 ```
 
-What about forward and backward selection.
+What about forward and backward selection. Also very slow. Time to go to other solution.
+
 ```{r}
 # Backward
-lmBwd <- regsubsets(target~.,data=train,method="backward")
+# lmBwd <- regsubsets(target~.,data=train,method="backward")
 ```
 
-### Embedded methods
+## Undersampling
+
+It appears we have a serious problem of engineering features and making decent predictions because one of the classes is seriously underrepresented. Since the cardinality overrepresented label is very high, undersampling should be our next step.
+
+```{r}
+table(train$target)
+
+# ROSE package does not seem to work at all.
+# mlr package can't handle logical columns.
+# Not a big fan of caret package because it dumbs things down too much. But here goes.
+library(caret)
+rfModel <- caret::train(target ~ ., data=train, method = "rf", preProcess = c("scale","center"),
+                        trControl = trainControl(method = "repeatedcv",number = 10,repeats = 3, verboseIter=F))
+
+```
