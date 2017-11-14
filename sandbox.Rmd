@@ -43,6 +43,9 @@ test[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
 
 rm(cols)
 
+# Change target classification to factor for caret package
+train$target <- as.factor(train$target)
+
 # Remove id
 train <- subset(train,select=c(-id))
 
