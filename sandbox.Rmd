@@ -187,7 +187,8 @@ table(train$target)
 # mlr package can't handle logical columns.
 # Not a big fan of caret package because it dumbs things down too much. But here goes.
 library(caret)
-rfModel <- caret::train(target ~ ., data=train, method = "rf", preProcess = c("scale","center"),
+rfModel <- caret::train(target ~ ., data=train, method = "rf", 
+                        preProcess = c("scale","center"), na.action = na.omit,
                         trControl = trainControl(method = "repeatedcv",number = 10,repeats = 3, verboseIter=F))
 
 ```
