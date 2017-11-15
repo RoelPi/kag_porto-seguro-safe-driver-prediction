@@ -67,19 +67,26 @@ names(train)
 # Summary and overview of the data
 str(train)
 
-# What is the claim rate?
-sum(train$target) / nrow(train)
+# What is the 'claim rate'?
+nrow(train[target==TRUE]) / nrow(train)
 
 ```
 
 How many complete rows are there?
 
-There is also quite a lot of rows which contain NA's. 
+There is also quite a lot of rows which contain NA's. Interesting is the fact that the 'claim rate' is higher for rows where there is no NA values.
 ```{r}
 # Absolute
 nrow(train[complete.cases(train),])
+
 # Relative
 nrow(train[complete.cases(train),]) / nrow(train)
+
+# Is the amount of NAs spread evenly in relation to the 'claim rate'?
+
+nrow(train[complete.cases(train) & target == TRUE,]) / nrow(train[complete.cases(train),])
+nrow(train[!complete.cases(train) & target == TRUE,]) / nrow(train[!complete.cases(train),])
+
 ```
 
 ## Sampling (optional)
