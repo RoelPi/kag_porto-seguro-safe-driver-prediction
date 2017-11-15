@@ -9,7 +9,7 @@ set.seed(03031988)
 library(data.table)
 
 # Comment this out when data does not need to be reloaded
-rm(train)
+rm(list=ls())
 
 if (!exists('train')) { train <- data.table(read.csv('train.csv', na.strings="-1")) }
 if (!exists('test')) { test <- data.table(read.csv('test.csv', na.strings="-1")) }
@@ -80,7 +80,10 @@ There is also quite a lot of rows which contain NA's.
 nrow(train[complete.cases(train),])
 # Relative
 nrow(train[complete.cases(train),]) / nrow(train)
+```
 
+## Sampling (optional)
+```{r}
 # For computing speed purposes, code is written by testing it on a 10k non-missing data record data set.
 # Uncomment next line to work with complete rows only
 train <- train[complete.cases(train),]
@@ -179,9 +182,14 @@ What about forward and backward selection. Also very slow. Time to go to other s
 # lmBwd <- regsubsets(target~.,data=train,method="backward")
 ```
 
-## Undersampling
+## Random Forest with Undersampling
 
-It appears we have a serious problem of engineering features and making decent predictions because one of the classes is seriously underrepresented. Since the cardinality overrepresented label is very high, undersampling should be our next step.
+The following settings are used:
+* na.action = na.omit (no imputation)
+* 3 fold cross-valdiation with one repeat
+* Undersampling (!)
+
+Sensitivity and specificity around 62% (which is bad).
 
 ```{r}
 table(train$target)
@@ -192,6 +200,11 @@ table(train$target)
 library(caret)
 rfModel <- caret::train(target ~ ., data=train, method = "rf", 
                         preProcess = c("scale","center"), na.action = na.omit,
-                        trControl = trainControl(method = "repeatedcv",number = 10,repeats = 3, verboseIter=F))
+                        trControl = trainControl(method = "repeatedcv",number = 3,
+                                                 repeats = 1, verboseIter=T,
+                                                 sampling="down")) # Undersampling
 
+rfTrainPredict <- predict(rfModel,train)
+confusionMatrix(rfTrainPredict,train[complete.cases(train),]$target)
+varImp(rfModel,scale=T)
 ```
