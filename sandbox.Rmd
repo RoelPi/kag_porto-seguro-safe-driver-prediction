@@ -5,15 +5,13 @@ output: html_notebook
 
 
 ```{r}
+rm(list=ls())
 
 # Settings
 settingImputation = T
 
 set.seed(03031988)
 library(data.table)
-
-# Comment this out when data does not need to be reloaded
-rm(list=ls())
 
 if (!exists('train')) { train <- data.table(read.csv('train.csv', na.strings="-1")) }
 if (!exists('test')) { test <- data.table(read.csv('test.csv', na.strings="-1")) }
@@ -56,7 +54,7 @@ if ("id" %in% names(train)) {
 }
 
 # Make backup of train
-save(train,"train.rda")
+save(train,file="train.rda")
 ```
 
 ## Exploratory analysis
@@ -107,8 +105,8 @@ if (settingImputation == T) {
         load(file="trainImputed.rda")
     } else {
         # This is a loop that makes sure that the meta data 'field was an NA' is stored in a separate new dummy for each of the existing variables.
-        for (i in 2:ncol(train)) {
-            isNA <- data.frame(is.na(train[,i]))
+        for (i in 2:as.integer(ncol(train))) {
+            isNA <- data.frame(is.na(train[,i,with=F])) # I'm unsure why I need to use 'with' here, I though this was only needed in old data.table versions
             names(isNA) <- paste0("is_na_",names(train)[i])
             train <- cbind(train,isNA)
         }
@@ -201,14 +199,14 @@ rm(v)
 
 ### Wrapper method
 
-We can use the bestglm or regsubsets package to find out the best variables for each n where n is the amount of predictors. This is slow as hell because it is a huge data set, even when sampled, as it has 2^57 models.
+We can use the bestglm or regsubsets package to find out the best models. This is slow as hell because it is a huge data set, even when sampled, as it has 2^57 models.
 
 ```{r}
 library(regsubsets)
 # lmReg <- regsubsets(target~.,data=train,nvmax=57,really.big=T)
 ```
 
-What about forward and backward selection. Also very slow. Time to go to other solution.
+What about forward and backward feature selection. Also very slow. Time to go to other solution.
 
 ```{r}
 # Backward
