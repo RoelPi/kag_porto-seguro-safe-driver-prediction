@@ -5,6 +5,10 @@ output: html_notebook
 
 
 ```{r}
+
+# Settings
+settingImputation = T
+
 set.seed(03031988)
 library(data.table)
 
@@ -47,10 +51,12 @@ rm(cols)
 train$target <- as.factor(train$target)
 
 # Remove id
-train <- subset(train,select=c(-id))
+if ("id" %in% names(train)) {
+    train <- subset(train,select=c(-id))
+}
 
 # Make backup of train
-trainBackup <- train
+save(train,"train.rda")
 ```
 
 ## Exploratory analysis
@@ -89,19 +95,40 @@ nrow(train[!complete.cases(train) & target == TRUE,]) / nrow(train[!complete.cas
 
 ```
 
-## Sampling (optional)
+
+## Imputation
+In this phase we impute the missing data using a KNN method. We also save the meta data - the information that variable Y was missing for row X - in a new variable. We do this for each variable.
+
 ```{r}
-# For computing speed purposes, code is written by testing it on a 10k non-missing data record data set.
-# Uncomment next line to work with complete rows only
-train <- train[complete.cases(train),]
-# Uncomment the next line to work with a sample of 10k rows.
-train <- train[sample(nrow(train),size = 10000,replace = F),]
+library(RANN)
+library(caret)
+if (settingImputation == T) {
+    if (file.exists("trainImputed.rda")) {
+        load(file="trainImputed.rda")
+    } else {
+        # This is a loop that makes sure that the meta data 'field was an NA' is stored in a separate new dummy for each of the existing variables.
+        for (i in 2:ncol(train)) {
+            isNA <- data.frame(is.na(train[,i]))
+            names(isNA) <- paste0("is_na_",names(train)[i])
+            train <- cbind(train,isNA)
+        }
+        
+        # In a next phase we impute these with a KNN method.
+        knnImputeModel <- caret::preProcess(train,method="knnImpute")
+        train <- predict(knnImputeModel,train)
+        
+        # Save the object to avoid recalculation
+        save(train,"trainImputed.rda")
+    }
+}
 ```
 
 ## Fitting all variables
+For education purposes, we simple modeled a logit model on all the existing variables.
+
 ```{r}
-lmAll <- glm(target~.,data=train)
-summary(lmAll)
+# lmAll <- glm(target~.,data=train)
+# summary(lmAll)
 ```
 
 ## Feature selection
@@ -120,7 +147,6 @@ cols <- grep("\\_cat|target",names(train),value=T,invert=T)
 
 # Generate correlation matrix with absolute value of correlation
 corMatrixWide <- abs(cor(train[,..cols]))
-
 
 # Convert correlation matrix to long format
 corMatrixLong <- data.table(melt(corMatrixWide))
