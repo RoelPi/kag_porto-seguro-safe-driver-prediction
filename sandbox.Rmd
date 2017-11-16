@@ -132,7 +132,7 @@ if (settingImputation == T) {
         # In a next phase we impute these with a KNN method. Data is also normalized.
         knnImputeModel <- caret::preProcess(trainDF,method="knnImpute")
         trainDF <- predict(knnImputeModel,trainDF)
-        save(train,"trainImputed.rda")
+        save(trainDF,"trainImputed.rda")
     }
 }
 ```
