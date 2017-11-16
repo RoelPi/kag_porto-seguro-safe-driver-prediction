@@ -104,19 +104,22 @@ if (settingImputation == T) {
     if (file.exists("trainImputed.rda")) {
         load(file="trainImputed.rda")
     } else {
-        # This is a loop that makes sure that the meta data 'field was an NA' is stored in a separate new dummy for each of the existing variables.
+        # This is a loop that makes sure that the meta data 'field was an NA' is stored in a 
+        # separate new dummy for each of the existing variables.
+        
         for (i in 2:as.integer(ncol(train))) {
             isNA <- data.frame(is.na(train[,i,with=F])) # I'm unsure why I need to use 'with' here, I though this was only needed in old data.table versions
             names(isNA) <- paste0("is_na_",names(train)[i])
-            train <- cbind(train,isNA)
+            if (i == 2) { trainNA <- isNA }
+            else { trainNA <- cbind(trainNA,isNA) }
         }
         
         # In a next phase we impute these with a KNN method.
         knnImputeModel <- caret::preProcess(train,method="knnImpute")
-        train <- predict(knnImputeModel,train)
+        trainTest <- predict(knnImputeModel,train,100)
         
         # Save the object to avoid recalculation
-        save(train,"trainImputed.rda")
+        # save(train,"trainImputed.rda")
     }
 }
 ```
