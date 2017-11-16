@@ -116,7 +116,7 @@ if (settingImputation == T) {
         
         # In a next phase we impute these with a KNN method.
         knnImputeModel <- caret::preProcess(train,method="knnImpute")
-        trainTest <- predict(knnImputeModel,train,100)
+        trainTest <- predict(knnImputeModel,train)
         
         # Save the object to avoid recalculation
         # save(train,"trainImputed.rda")
