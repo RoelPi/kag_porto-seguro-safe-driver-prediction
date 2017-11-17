@@ -15,7 +15,7 @@ set.seed(03031988)
 library(data.table)
 
 if (!exists('trainDF')) { trainDF <- data.table(read.csv('train.csv', na.strings="-1")) }
-if (!exists('testDF')) { testDF <- data.table(read.csv('test.csv', na.strings="-1")) }
+#if (!exists('testDF')) { testDF <- data.table(read.csv('test.csv', na.strings="-1")) }
 
 ```
 
@@ -35,12 +35,12 @@ cols <- grep("\\_bin|target",names(trainDF),value=T)
 trainDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
 
 # Transform categorical values - test
-cols <- grep("\\_cat",names(trainDF),value=T)
-testDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
+#cols <- grep("\\_cat",names(trainDF),value=T)
+#testDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
 
 # Transform boolean values - test
-cols <- grep("\\_bin",names(trainDF),value=T)
-testDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
+#cols <- grep("\\_bin",names(trainDF),value=T)
+#testDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
 
 rm(cols)
 
@@ -81,14 +81,14 @@ There is also quite a lot of rows which contain NA's. Interesting is the fact th
 
 ```{r}
 # Absolute
-nrow(train[complete.cases(trainDF),])
+nrow(trainDF[complete.cases(trainDF),])
 
 # Relative
-nrow(train[complete.cases(trainDF),]) / nrow(trainDF)
+nrow(trainDF[complete.cases(trainDF),]) / nrow(trainDF)
 
 # Is the amount of NAs spread evenly in relation to the 'claim rate'?
-nrow(train[complete.cases(trainDF) & target == TRUE,]) / nrow(train[complete.cases(trainDF),])
-nrow(train[!complete.cases(trainDF) & target == TRUE,]) / nrow(train[!complete.cases(trainDF),])
+nrow(trainDF[complete.cases(trainDF) & target == TRUE,]) / nrow(trainDF[complete.cases(trainDF),])
+nrow(trainDF[!complete.cases(trainDF) & target == TRUE,]) / nrow(trainDF[!complete.cases(trainDF),])
 
 # Which variable has the most NA's?
 naCount <- apply(train,2,function(x) sum(is.na(x))) / nrow(trainDF)
@@ -132,7 +132,7 @@ if (settingImputation == T) {
         # In a next phase we impute these with a KNN method. Data is also normalized.
         knnImputeModel <- caret::preProcess(trainDF,method="knnImpute")
         trainDF <- predict(knnImputeModel,trainDF)
-        save(trainDF,"trainImputed.rda")
+        save(trainDF,file = "trainImputed.rda")
     }
 }
 ```
