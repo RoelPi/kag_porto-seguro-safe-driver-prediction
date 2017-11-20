@@ -1,140 +1,162 @@
----
-title: "Seguro Kaggle Competition: Random Forest"
-output: html_notebook
----
-
-# Load all data
-```{r}
-rm(list=ls())
-
-# Settings
-settingDrop = T # Drop variables with high NA rate?
-settingImputation = T # Impute NA variables?
-
-set.seed(03031988)
-library(data.table)
-
-if (!exists('trainDF')) { trainDF <- data.table(read.csv('train.csv', na.strings="-1")) }
-if (!exists('testDF')) { testDF <- data.table(read.csv('test.csv', na.strings="-1")) }
-
-sampleSelection <- sample(1:nrow(trainDF),floor(nrow(trainDF) * 0.3))
-trainDF <- trainDF[-sampleSelection,]
-validationDF <- trainDF[sampleSelection,]
-```
-
-# Preprocess training data
-```{r}
-# Transform categorical values - train
-cols <- grep("\\_cat",names(trainDF),value=T)
-trainDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
-
-# Transform boolean values - train (also target)
-cols <- grep("\\_bin|target",names(trainDF),value=T)
-trainDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
-
-rm(cols)
-
-# Change target classification to factor for caret package
-trainDF$target <- as.factor(trainDF$target)
-
-# Remove id
-if ("id" %in% names(trainDF)) {
-    trainDF <- subset(trainDF,select=c(-id))
-}
-
-# Make backup of train
-save(trainDF,file="trainDF.rda")
-```
-
-# NA Removal
-```{r}
-library(RANN)
-library(caret)
-
-# Drop variables with a high amount of NAs
-if (settingDrop == T) {
-    trainDF <- trainDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
-    # validationDF <- validationDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
-    # testDF <- testDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
-}
-```
-
-# NA Imputation
-```{r}
-if (settingImputation == T) {
-    if (file.exists("trainImputed.rda")) {
-        load(file="trainImputed.rda")
-    } else {
+    ---
+    title: "Seguro Kaggle Competition: Random Forest"
+    output: html_notebook
+    ---
+    
+    # Load all data
+    ```{r}
+    rm(list=ls())
+    kagLoad <- function() {
+        library(data.table)
         
-        # This is a loop that makes sure that the meta data 'field was an NA' is stored in a 
-        # separate new dummy for each of the existing variables.
-        for (i in 2:as.integer(ncol(trainDF))) {
-            isNA <- data.frame(is.na(trainDF[,i,with=F])) # I'm unsure why I need to use 'with' here, I though this was only needed in old data.table versions
-            names(isNA) <- paste0("is_na_",names(trainDF)[i])
-            if (i == 2) { trainNA <- isNA }
-            else { trainNA <- cbind(trainNA,isNA) }
+        if (!exists('trainDF')) { trainData <- data.table(read.csv('train.csv', na.strings="-1")) }
+        if (!exists('testDF')) { testDF <<- data.table(read.csv('test.csv', na.strings="-1")) }
+        
+        sampleSelection <- sample(1:nrow(trainData),floor(nrow(trainData) * 0.3))
+        trainDF <<- trainData[-sampleSelection,]
+        validationDF <<- trainData[sampleSelection,]
+    }
+    ```
+    
+    
+    # Take sample from data set
+    ```{r}
+    kagTest <- function() {
+        trainDF <<- head(trainDF,10000)
+        validationDF <<- head(validationDF,10000)
+    }
+    ```
+    
+    # Preprocess training data
+    ```{r}
+    kagPreProcess <- function() {
+        # Transform categorical values - train
+        cols <- grep("\\_cat",names(trainDF),value=T)
+        trainDF <<- trainDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
+        
+        # Transform boolean values - train (also target)
+        cols <- grep("\\_bin|target",names(trainDF),value=T)
+        trainDF <<- trainDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
+        
+        rm(cols)
+        
+        # Change target classification to factor for caret package
+        trainDF$target <<- as.factor(trainDF$target)
+        
+        # Remove id
+        if ("id" %in% names(trainDF)) {
+            trainDF <<- subset(trainDF,select=c(-id))
         }
-        rm(isNA)
+        
+        # Make backup of train
+        save(trainDF,file="trainDF.rda")
+    }
+    ```
+    
+    # NA Imputation
+    ```{r}
+    kagImputeNA <- function() {
+        library(RANN)
+        library(caret)
+                
+        # separate new dummy for each of the existing variables.
+        trainNA <- data.table(is.na(trainDF[,-1]))
+        colnames(trainNA) <- paste0(colnames(trainNA),"_na")
+    
+        # NA Removal of dimensions with a high NA ratio
+        trainDF <- trainDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
         
         # In a next phase we impute these with a KNN method. Data is also normalized.
-        knnImputeModel <- caret::preProcess(trainDF,method="knnImpute")
-        trainDF <- predict(knnImputeModel,trainDF)
+        knnImputeModelTrain <<- caret::preProcess(trainDF,method="knnImpute")
+        trainDF <<- predict(knnImputeModelTrain,trainDF)
         save(trainDF,file = "trainImputed.rda")
+        trainDF <<- cbind(trainDF,trainNA)
     }
-}
-```
-
-# Model training
-```{r}
-table(trainDF$target)
-
-# ROSE package does not seem to work at all.
-# mlr package can't handle logical columns.
-# Not a big fan of caret package because it dumbs things down too much. But here goes.
-library(caret)
-rfModel <- caret::train(target ~ ., data=trainDF, method = "rf", 
-                        preProcess = c("scale","center"), na.action = na.omit,
-                        trControl = trainControl(method = "repeatedcv",number = 3,
-                                                 repeats = 1, verboseIter=T,
-                                                 sampling="down")) # Undersampling
-
-rfTrainPredict <- predict(rfModel,trainDF)
-confusionMatrix(rfTrainPredict,trainDF[complete.cases(trainDF),]$target)
-varImp(rfModel,scale=T)
-```
-
-# Validation
-```{r}
-# Transform categorical values - validation
-cols <- grep("\\_cat",names(validationDF),value=T)
-validationDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
-
-# Transform boolean values - validation
-cols <- grep("\\_bin",names(validationDF),value=T)
-validationDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
-
-# Remove id
-if ("id" %in% names(validationDF)) {
-    validarionDF <- subset(validationDF,select=c(-id))
-}
-
-rm(cols)
-
-# Change target classification to factor for caret package
-validationDF$target <- as.factor(validationDF$target)
-
-```
-
-
-# Submission
-```{r}
-# Transform categorical values - test
-cols <- grep("\\_cat",names(testDF),value=T)
-testDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
-
-# Transform boolean values - test
-cols <- grep("\\_bin",names(testDF),value=T)
-testDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
-```
-
-
+    ```
+    
+    # Model training
+    ```{r}
+    kagTrain <- function() {
+        # table(trainDF$target)
+        library(caret)
+        rfModel <<- caret::train(target ~ ., data=trainDF, method = "rf", 
+                                preProcess = c("scale","center"), na.action = na.omit,
+                                trControl = trainControl(method = "repeatedcv",number = 3,
+                                                         repeats = 1, verboseIter=F,
+                                                         sampling="down")) # Undersampling
+        save(rfModel,file="rfModel.rda")
+        
+        rfTrainPredict <<- predict(rfModel,trainDF)
+        save(rfTrainPredict,file = "trainPredicted.rda")
+    }
+    ```
+    
+    # Validation
+    ```{r}
+    kagValidate <- function() {
+        # Transform categorical values - validation
+        cols <- grep("\\_cat",names(validationDF),value=T)
+        validationDF <<- validationDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
+        
+        # Transform boolean values - validation
+        cols <- grep("\\_bin|target",names(validationDF),value=T)
+        validationDF <<- validationDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
+        
+        # Remove id
+        if ("id" %in% names(validationDF)) {
+            validationDF <<- subset(validationDF,select=c(-id))
+        }
+        
+        rm(cols)
+        
+        # Change target classification to factor for caret package
+        validationDF$target <<- as.factor(validationDF$target)
+        
+        # NA metadata extraction
+        # separate new dummy for each of the existing variables.
+        validationNA <- data.table(is.na(validationDF[,-1]))
+        colnames(validationNA) <- paste0(colnames(validationNA),"_na")
+        
+        validationDF <<- validationDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
+        
+        # Imputation
+        knnImputeModelValidation <<- caret::preProcess(validationDF,method="knnImpute")
+        validationDF <<- predict(knnImputeModelValidation,validationDF)
+        save(validationDF,file="validationImputed.rda")
+        validationDF <<- cbind(validationDF,validationNA)
+        
+        # Prediction
+        names(validationDF) <<- make.names(names(trainDF))
+        rfValidationPredict <<- predict(rfModel,newdata = validationDF)
+        save(rfValidationPredict, file = "validationPredicted.rda")
+    }
+    
+    ```
+    
+    
+    # Submission (unfinished)
+    ```{r}
+    kagSubmit <- function() {
+        # Transform categorical values - test
+        cols <- grep("\\_cat",names(testDF),value=T)
+        testDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
+        
+        # Transform boolean values - test
+        cols <- grep("\\_bin",names(testDF),value=T)
+        testDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
+    }
+    ```
+    
+    ```{r}
+    set.seed(03031988)
+    kagLoad()
+    # kagTest() # Use this to run a test data set through the code.
+    kagPreProcess()
+    kagImputeNA() # Make sure to remove trainImputed.rda in the wd if you want to restart the imputation process.
+    kagTrain()
+    confusionMatrix(rfTrainPredict,trainDF[complete.cases(trainDF),]$target)
+    varImp(rfModel,scale=T)
+    kagValidate()
+    confusionMatrix(rfValidationPredict,validationDF[complete.cases(validationDF),]$target)
+    # kagSubmit()
+    ```
