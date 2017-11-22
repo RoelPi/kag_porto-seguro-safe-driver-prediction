@@ -5,7 +5,9 @@
     
     # Load all data
     ```{r}
+    library(doMC)
     rm(list=ls())
+    # registerDoMC(cores=6)
     kagLoad <- function() {
         library(data.table)
         
@@ -58,6 +60,9 @@
     kagImputeNA <- function() {
         library(RANN)
         library(caret)
+        library(mice)
+        
+        registerDoMC(cores=6)
                 
         # separate new dummy for each of the existing variables.
         trainNA <- data.table(is.na(trainDF[,-1]))
@@ -67,8 +72,8 @@
         trainDF <- trainDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
         
         # In a next phase we impute these with a KNN method. Data is also normalized.
-        knnImputeModelTrain <<- caret::preProcess(trainDF,method="knnImpute")
-        trainDF <<- predict(knnImputeModelTrain,trainDF)
+        trainDF <- mice(trainDF, m=5, maxit = 5, method = 'pmm')
+        
         save(trainDF,file = "trainImputed.rda")
         trainDF <<- cbind(trainDF,trainNA)
     }
@@ -79,6 +84,8 @@
     kagTrain <- function() {
         # table(trainDF$target)
         library(caret)
+        registerDoMC(cores=6)
+            
         rfModel <<- caret::train(target ~ ., data=trainDF, method = "rf", 
                                 preProcess = c("scale","center"), na.action = na.omit,
                                 trControl = trainControl(method = "repeatedcv",number = 3,
@@ -121,13 +128,17 @@
         
         # Imputation
         knnImputeModelValidation <<- caret::preProcess(validationDF,method="knnImpute")
+ 
         validationDF <<- predict(knnImputeModelValidation,validationDF)
+        
+        rfValidationPredict <<- predict(rfModel,validationDF)
+                
+        
         save(validationDF,file="validationImputed.rda")
         validationDF <<- cbind(validationDF,validationNA)
         
         # Prediction
         names(validationDF) <<- make.names(names(trainDF))
-        rfValidationPredict <<- predict(rfModel,newdata = validationDF)
         save(rfValidationPredict, file = "validationPredicted.rda")
     }
     
@@ -152,11 +163,14 @@
     kagLoad()
     # kagTest() # Use this to run a test data set through the code.
     kagPreProcess()
-    kagImputeNA() # Make sure to remove trainImputed.rda in the wd if you want to restart the imputation process.
+    kagImputeNA()
     kagTrain()
+    
     confusionMatrix(rfTrainPredict,trainDF[complete.cases(trainDF),]$target)
     varImp(rfModel,scale=T)
+    
     kagValidate()
-    confusionMatrix(rfValidationPredict,validationDF[complete.cases(validationDF),]$target)
+    
+    confusionMatrix(rfValidationPredict,validationDF$target)
     # kagSubmit()
     ```
