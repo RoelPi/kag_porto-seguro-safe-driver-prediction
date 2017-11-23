@@ -5,11 +5,15 @@
     
     # Load all data
     ```{r}
-    library(doMC)
     rm(list=ls())
-    # registerDoMC(cores=6)
+    # library(doMC)
+    # registerDoMC(cores=2)
+    
+    # Imputation Parameters
+    impN <- 1
+    impIter <- 1
+    
     kagLoad <- function() {
-        library(data.table)
         
         if (!exists('trainDF')) { trainData <- data.table(read.csv('train.csv', na.strings="-1")) }
         if (!exists('testDF')) { testDF <<- data.table(read.csv('test.csv', na.strings="-1")) }
@@ -37,13 +41,13 @@
         trainDF <<- trainDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
         
         # Transform boolean values - train (also target)
-        cols <- grep("\\_bin|target",names(trainDF),value=T)
+        cols <- grep("\\_bin",names(trainDF),value=T)
         trainDF <<- trainDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
         
         rm(cols)
         
         # Change target classification to factor for caret package
-        trainDF$target <<- as.factor(trainDF$target)
+        trainDF$target <<- factor(trainDF$target, levels = c(1,0))
         
         # Remove id
         if ("id" %in% names(trainDF)) {
@@ -58,11 +62,8 @@
     # NA Imputation
     ```{r}
     kagImputeNA <- function() {
-        library(RANN)
-        library(caret)
-        library(mice)
         
-        registerDoMC(cores=6)
+        # registerDoMC(cores=6)
                 
         # separate new dummy for each of the existing variables.
         trainNA <- data.table(is.na(trainDF[,-1]))
@@ -72,7 +73,7 @@
         trainDF <- trainDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
         
         # In a next phase we impute these with a KNN method. Data is also normalized.
-        trainDF <- mice(trainDF, m=5, maxit = 5, method = 'pmm')
+        trainDF <- complete(mice(trainDF, m=impN, maxit = impIter, method = 'pmm'))
         
         save(trainDF,file = "trainImputed.rda")
         trainDF <<- cbind(trainDF,trainNA)
@@ -83,8 +84,7 @@
     ```{r}
     kagTrain <- function() {
         # table(trainDF$target)
-        library(caret)
-        registerDoMC(cores=6)
+        # registerDoMC(cores=6)
             
         rfModel <<- caret::train(target ~ ., data=trainDF, method = "rf", 
                                 preProcess = c("scale","center"), na.action = na.omit,
@@ -106,7 +106,7 @@
         validationDF <<- validationDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
         
         # Transform boolean values - validation
-        cols <- grep("\\_bin|target",names(validationDF),value=T)
+        cols <- grep("\\_bin",names(validationDF),value=T)
         validationDF <<- validationDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
         
         # Remove id
@@ -117,7 +117,7 @@
         rm(cols)
         
         # Change target classification to factor for caret package
-        validationDF$target <<- as.factor(validationDF$target)
+        validationDF$target <<- factor(validationDF$target,levels=c(1,0))
         
         # NA metadata extraction
         # separate new dummy for each of the existing variables.
@@ -127,18 +127,13 @@
         validationDF <<- validationDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
         
         # Imputation
-        knnImputeModelValidation <<- caret::preProcess(validationDF,method="knnImpute")
- 
-        validationDF <<- predict(knnImputeModelValidation,validationDF)
-        
-        rfValidationPredict <<- predict(rfModel,validationDF)
-                
-        
-        save(validationDF,file="validationImputed.rda")
+        validationDF <<- complete(mice(validationDF, m=impN, maxit = impIter, method = 'pmm'))
         validationDF <<- cbind(validationDF,validationNA)
+        names(validationDF) <<- make.names(names(trainDF))
+        save(validationDF,file="validationImputed.rda")
         
         # Prediction
-        names(validationDF) <<- make.names(names(trainDF))
+        rfValidationPredict <<- predict(rfModel,validationDF)
         save(rfValidationPredict, file = "validationPredicted.rda")
     }
     
@@ -159,9 +154,14 @@
     ```
     
     ```{r}
+    library(caret)
+    library(data.table)
+    library(RANN)
+    library(mice)
+    
     set.seed(03031988)
     kagLoad()
-    # kagTest() # Use this to run a test data set through the code.
+    kagTest() # Use this to run a test data set through the code.
     kagPreProcess()
     kagImputeNA()
     kagTrain()
