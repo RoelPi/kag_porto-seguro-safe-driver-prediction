@@ -1,9 +1,9 @@
-    ---
-    title: "Seguro Kaggle Competition: Random Forest"
-    output: html_notebook
-    ---
-    
-    # Load all data
+---
+title: "Seguro Kaggle Competition: Random Forest"
+output: html_notebook
+---
+
+# Load all data
     ```{r}
     rm(list=ls())
     # library(doMC)
@@ -25,16 +25,16 @@
     ```
     
     
-    # Take sample from data set
-    ```{r}
+# Take sample from data set
+```{r}
     kagTest <- function() {
         trainDF <<- head(trainDF,10000)
         validationDF <<- head(validationDF,10000)
     }
-    ```
+```
     
-    # Preprocess training data
-    ```{r}
+# Preprocess training data
+```{r}
     kagPreProcess <- function() {
         # Transform categorical values - train
         cols <- grep("\\_cat",names(trainDF),value=T)
@@ -57,10 +57,10 @@
         # Make backup of train
         save(trainDF,file="trainDF.rda")
     }
-    ```
+```
     
     # NA Imputation
-    ```{r}
+```{r}
     kagImputeNA <- function() {
         
         # registerDoMC(cores=6)
@@ -78,10 +78,9 @@
         save(trainDF,file = "trainImputed.rda")
         trainDF <<- cbind(trainDF,trainNA)
     }
-    ```
+```
 
 ## Dimensionality Reduction
-    
 ```{r}
     kagDimRed <- function() {
         source("https://bioconductor.org/biocLite.R")
@@ -95,8 +94,8 @@
     }
 ```
 
-    # Model training
-    ```{r}
+# Model training
+```{r}
     kagTrain <- function() {
         # table(trainDF$target)
         # registerDoMC(cores=6)
@@ -111,10 +110,10 @@
         rfTrainPredict <<- predict(rfModel,trainDF)
         save(rfTrainPredict,file = "trainPredicted.rda")
     }
-    ```
+```
     
-    # Validation
-    ```{r}
+# Validation
+```{r}
     kagValidate <- function() {
         # Transform categorical values - validation
         cols <- grep("\\_cat",names(validationDF),value=T)
@@ -157,11 +156,11 @@
         save(rfValidationPredict, file = "validationPredicted.rda")
     }
     
-    ```
+```
     
     
-    # Submission (unfinished)
-    ```{r}
+# Submission (unfinished)
+```{r}
     kagSubmit <- function() {
         # Transform categorical values - test
         cols <- grep("\\_cat",names(testDF),value=T)
@@ -171,9 +170,10 @@
         cols <- grep("\\_bin",names(testDF),value=T)
         testDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
     }
-    ```
-    
-    ```{r}
+```
+
+Run through the code.
+```{r}
     library(caret)
     library(data.table)
     library(RANN)
@@ -181,7 +181,7 @@
     
     set.seed(03031988)
     kagLoad()
-   # kagTest() # Use this to run a test data set through the code.
+    # kagTest() # Use this to run a test data set through the code.
     kagPreProcess()
     kagImputeNA()
     kagDimRed()
