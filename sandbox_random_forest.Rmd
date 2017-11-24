@@ -79,7 +79,22 @@
         trainDF <<- cbind(trainDF,trainNA)
     }
     ```
+
+## Dimensionality Reduction
     
+```{r}
+    kagDimRed <- function() {
+        source("https://bioconductor.org/biocLite.R")
+        biocLite("pcaMethods")
+        library(pcaMethods)
+        
+        trainDF <<- 1 * trainDF
+        
+        trainDF <<- prep(trainDF[,-1],scale = c("none"), center = FALSE)
+        trainDF <<- pca(trainDF, method = "nipals", center = FALSE, nPcs = 5)
+    }
+```
+
     # Model training
     ```{r}
     kagTrain <- function() {
@@ -132,6 +147,11 @@
         names(validationDF) <<- make.names(names(trainDF))
         save(validationDF,file="validationImputed.rda")
         
+        # Dimensionality Reduction
+        validationDF <<- 1 * validationDF
+        validationDF <<- prep(validationDF[,-1],scale = c("none"), center = FALSE)
+        validationDF <<- predict(object = validationDF, newdata = validationDF, pcs = 2, pre = F)
+        
         # Prediction
         rfValidationPredict <<- predict(rfModel,validationDF)
         save(rfValidationPredict, file = "validationPredicted.rda")
@@ -164,6 +184,7 @@
    # kagTest() # Use this to run a test data set through the code.
     kagPreProcess()
     kagImputeNA()
+    kagDimRed()
     kagTrain()
     
     confusionMatrix(rfTrainPredict,trainDF[complete.cases(trainDF),]$target)
@@ -173,23 +194,4 @@
     
     confusionMatrix(rfValidationPredict,validationDF$target)
     # kagSubmit()
-    ```
-    
-    Principle Component Analysis
-    
-```{r}
-
-source("https://bioconductor.org/biocLite.R")
-biocLite("pcaMethods")
-library(pcaMethods)
-
-trainDF <- 1 * trainDF
-
-trainDFpcs <- prep(trainDF[,-1],scale = c("none"), center = FALSE)
-trainDFpcs <- pca(trainDF, method = "nipals", center = FALSE, nPcs = 5)
-
-testDF <- 1 * testDF
-testDFpcs <- prep(testDF[,-1],scale = c("none"), center = FALSE)
-testDFpcs <- predict(object = trainDFpcs, newdata = testDFpcs, pcs = 2, pre = F)
-
 ```
