@@ -10,8 +10,8 @@
     # registerDoMC(cores=2)
     
     # Imputation Parameters
-    impN <- 1
-    impIter <- 1
+    impN <- 5      #should be >1
+    impIter <- 20   #should be >20
     
     kagLoad <- function() {
         
@@ -161,7 +161,7 @@
     
     set.seed(03031988)
     kagLoad()
-    kagTest() # Use this to run a test data set through the code.
+   # kagTest() # Use this to run a test data set through the code.
     kagPreProcess()
     kagImputeNA()
     kagTrain()
@@ -169,8 +169,27 @@
     confusionMatrix(rfTrainPredict,trainDF[complete.cases(trainDF),]$target)
     varImp(rfModel,scale=T)
     
-    kagValidate()
+   # kagValidate()
     
     confusionMatrix(rfValidationPredict,validationDF$target)
     # kagSubmit()
     ```
+    
+    Principle Component Analysis
+    
+```{r}
+
+source("https://bioconductor.org/biocLite.R")
+biocLite("pcaMethods")
+library(pcaMethods)
+
+trainDF <- 1 * trainDF
+
+trainDFpcs <- prep(trainDF[,-1],scale = c("none"), center = FALSE)
+trainDFpcs <- pca(trainDF, method = "nipals", center = FALSE, nPcs = 5)
+
+testDF <- 1 * testDF
+testDFpcs <- prep(testDF[,-1],scale = c("none"), center = FALSE)
+testDFpcs <- predict(object = trainDFpcs, newdata = testDFpcs, pcs = 2, pre = F)
+
+```
