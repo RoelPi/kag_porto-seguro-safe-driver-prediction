@@ -9,10 +9,6 @@ output: html_notebook
     # library(doMC)
     # registerDoMC(cores=2)
     
-    # Imputation Parameters
-    impN <- 5      #should be >1
-    impIter <- 20   #should be >20
-    
     kagLoad <- function() {
         
         if (!exists('trainDF')) { trainData <- data.table(read.csv('train.csv', na.strings="-1")) }
@@ -27,171 +23,166 @@ output: html_notebook
     
 # Take sample from data set
 ```{r}
-    kagTest <- function() {
-        trainDF <<- head(trainDF,10000)
-        validationDF <<- head(validationDF,10000)
-    }
+kagTest <- function() {
+    trainDF <<- head(trainDF,10000)
+    validationDF <<- head(validationDF,10000)
+}
 ```
     
 # Preprocess training data
 ```{r}
-    kagPreProcess <- function() {
-        # Transform categorical values - train
-        cols <- grep("\\_cat",names(trainDF),value=T)
-        trainDF <<- trainDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
-        
-        # Transform boolean values - train (also target)
-        cols <- grep("\\_bin",names(trainDF),value=T)
-        trainDF <<- trainDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
-        
-        rm(cols)
-        
-        # Change target classification to factor for caret package
-        trainDF$target <<- factor(trainDF$target, levels = c(1,0))
-        
-        # Remove id
-        if ("id" %in% names(trainDF)) {
-            trainDF <<- subset(trainDF,select=c(-id))
-        }
-        
-        # Make backup of train
-        save(trainDF,file="trainDF.rda")
+kagPreProcess <- function() {
+    # Transform categorical values - train
+    cols <- grep("\\_cat",names(trainDF),value=T)
+    trainDF <<- trainDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
+    
+    # Transform boolean values - train (also target)
+    cols <- grep("\\_bin",names(trainDF),value=T)
+    trainDF <<- trainDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
+    
+    rm(cols)
+    
+    # Change target classification to factor for caret package
+    trainDF$target <<- factor(trainDF$target, levels = c(1,0))
+    
+    # Remove id
+    if ("id" %in% names(trainDF)) {
+        trainDF <<- subset(trainDF,select=c(-id))
     }
+    
+    # Make backup of train
+    save(trainDF,file="trainDF.rda")
+}
 ```
     
-    # NA Imputation
+# NA Imputation
 ```{r}
-    kagImputeNA <- function() {
-        
-        # registerDoMC(cores=6)
-                
-        # separate new dummy for each of the existing variables.
-        trainNA <- data.table(is.na(trainDF[,-1]))
-        colnames(trainNA) <- paste0(colnames(trainNA),"_na")
+kagImputeNA <- function() {
     
-        # NA Removal of dimensions with a high NA ratio
-        trainDF <- trainDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
-        
-        # In a next phase we impute these with a KNN method. Data is also normalized.
-        trainDF <- complete(mice(trainDF, m=impN, maxit = impIter, method = 'pmm'))
-        
-        save(trainDF,file = "trainImputed.rda")
-        trainDF <<- cbind(trainDF,trainNA)
-    }
-```
+    # registerDoMC(cores=6)
+        # Imputation Parameters
+    impN <- 3      #should be >1
+    impIter <- 20   #should be >20
+    # separate new dummy for each of the existing variables.
+    trainNA <- data.table(is.na(trainDF[,-1]))
+    colnames(trainNA) <- paste0(colnames(trainNA),"_na")
 
-## Dimensionality Reduction
-```{r}
-    kagDimRed <- function() {
-        source("https://bioconductor.org/biocLite.R")
-        biocLite("pcaMethods")
-        library(pcaMethods)
-        
-        trainDF <<- 1 * trainDF
-        
-        trainDF <<- prep(trainDF[,-1],scale = c("none"), center = FALSE)
-        trainDF <<- pca(trainDF, method = "nipals", center = FALSE, nPcs = 5)
-    }
+    # NA Removal of dimensions with a high NA ratio
+    trainDF <- trainDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
+    
+    # In a next phase we impute these with a KNN method. Data is also normalized.
+    trainDF <- complete(mice(trainDF, m=impN, maxit = impIter, method = 'pmm'))
+    
+    save(trainDF,file = "trainImputed.rda")
+    trainDF <<- cbind(trainDF,trainNA)
+}
 ```
 
 # Model training
 ```{r}
-    kagTrain <- function() {
-        # table(trainDF$target)
-        # registerDoMC(cores=6)
-            
-        rfModel <<- caret::train(target ~ ., data=trainDF, method = "rf", 
-                                preProcess = c("scale","center"), na.action = na.omit,
-                                trControl = trainControl(method = "repeatedcv",number = 3,
-                                                         repeats = 1, verboseIter=F,
-                                                         sampling="down")) # Undersampling
-        save(rfModel,file="rfModel.rda")
-        
-        rfTrainPredict <<- predict(rfModel,trainDF)
-        save(rfTrainPredict,file = "trainPredicted.rda")
-    }
+kagTrain <- function() {
+    # registerDoMC(cores=6)
+    
+    rfMetric = "Accuracy" # focus on accuracy
+    rfMethod = "grid"
+    
+    # rfTL <- round(sqrt(ncol(trainDF)))
+    rfTG <- expand.grid(.mtry=c(1:round(sqrt(ncol(trainDF))))) # Grid Search: Try 1 to (sqrt number of branches) params
+    rfTC <- trainControl(method = "repeatedcv", number = 10, repeats = 3, # Cross-validation, low now.
+                       sampling="down", #  Undersampling
+                       verboseIter=F, # No verbose needed
+                       search=rfMethod)
+
+    
+    rfModel <<- caret::train(target ~ ., data=trainDF, method = "rf", 
+                    preProcess = c("scale","center"), # Scale and center
+                    na.action = na.omit, # There shouldn't be any NA's left
+                    metric = rfMetric,
+                    # tuneLength = rfTL,
+                    tuneGrid = rfTG,
+                    trControl = rfTC
+                    )
+    save(rfModel,file="rfModel.rda")
+    
+    rfTrainPredict <<- predict(rfModel,trainDF)
+    save(rfTrainPredict,file = "trainPredicted.rda")
+}
 ```
     
 # Validation
 ```{r}
-    kagValidate <- function() {
-        # Transform categorical values - validation
-        cols <- grep("\\_cat",names(validationDF),value=T)
-        validationDF <<- validationDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
-        
-        # Transform boolean values - validation
-        cols <- grep("\\_bin",names(validationDF),value=T)
-        validationDF <<- validationDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
-        
-        # Remove id
-        if ("id" %in% names(validationDF)) {
-            validationDF <<- subset(validationDF,select=c(-id))
-        }
-        
-        rm(cols)
-        
-        # Change target classification to factor for caret package
-        validationDF$target <<- factor(validationDF$target,levels=c(1,0))
-        
-        # NA metadata extraction
-        # separate new dummy for each of the existing variables.
-        validationNA <- data.table(is.na(validationDF[,-1]))
-        colnames(validationNA) <- paste0(colnames(validationNA),"_na")
-        
-        validationDF <<- validationDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
-        
-        # Imputation
-        validationDF <<- complete(mice(validationDF, m=impN, maxit = impIter, method = 'pmm'))
-        validationDF <<- cbind(validationDF,validationNA)
-        names(validationDF) <<- make.names(names(trainDF))
-        save(validationDF,file="validationImputed.rda")
-        
-        # Dimensionality Reduction
-        validationDF <<- 1 * validationDF
-        validationDF <<- prep(validationDF[,-1],scale = c("none"), center = FALSE)
-        validationDF <<- predict(object = validationDF, newdata = validationDF, pcs = 2, pre = F)
-        
-        # Prediction
-        rfValidationPredict <<- predict(rfModel,validationDF)
-        save(rfValidationPredict, file = "validationPredicted.rda")
+kagValidate <- function() {
+    # Transform categorical values - validation
+    cols <- grep("\\_cat",names(validationDF),value=T)
+    validationDF <<- validationDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
+    
+    # Transform boolean values - validation
+    cols <- grep("\\_bin",names(validationDF),value=T)
+    validationDF <<- validationDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
+    
+    # Remove id
+    if ("id" %in% names(validationDF)) {
+        validationDF <<- subset(validationDF,select=c(-id))
     }
+    
+    rm(cols)
+    
+    # Change target classification to factor for caret package
+    validationDF$target <<- factor(validationDF$target,levels=c(1,0))
+    
+    # NA metadata extraction
+    # separate new dummy for each of the existing variables.
+    validationNA <- data.table(is.na(validationDF[,-1]))
+    colnames(validationNA) <- paste0(colnames(validationNA),"_na")
+    
+    validationDF <<- validationDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
+    
+    # Imputation
+    validationDF <<- complete(mice(validationDF, m=impN, maxit = impIter, method = 'pmm'))
+    validationDF <<- cbind(validationDF,validationNA)
+    names(validationDF) <<- make.names(names(trainDF))
+    save(validationDF,file="validationImputed.rda")
+    
+    # Prediction
+    rfValidationPredict <<- predict(rfModel,validationDF)
+    save(rfValidationPredict, file = "validationPredicted.rda")
+}
     
 ```
     
-    
 # Submission (unfinished)
 ```{r}
-    kagSubmit <- function() {
-        # Transform categorical values - test
-        cols <- grep("\\_cat",names(testDF),value=T)
-        testDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
-        
-        # Transform boolean values - test
-        cols <- grep("\\_bin",names(testDF),value=T)
-        testDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
-    }
+kagSubmit <- function() {
+    # Transform categorical values - test
+    cols <- grep("\\_cat",names(testDF),value=T)
+    testDF[, (cols) := lapply(.SD, as.factor), .SDcols=cols]
+    
+    # Transform boolean values - test
+    cols <- grep("\\_bin",names(testDF),value=T)
+    testDF[, (cols) := lapply(.SD, as.logical), .SDcols=cols]
+}
 ```
 
 Run through the code.
 ```{r}
-    library(caret)
-    library(data.table)
-    library(RANN)
-    library(mice)
-    
-    set.seed(03031988)
-    kagLoad()
-    # kagTest() # Use this to run a test data set through the code.
-    kagPreProcess()
-    kagImputeNA()
-    kagDimRed()
-    kagTrain()
-    
-    confusionMatrix(rfTrainPredict,trainDF[complete.cases(trainDF),]$target)
-    varImp(rfModel,scale=T)
-    
-   # kagValidate()
-    
-    confusionMatrix(rfValidationPredict,validationDF$target)
-    # kagSubmit()
+library(caret)
+library(data.table)
+library(RANN)
+library(mice)
+
+
+set.seed(03031988)
+# kagLoad()
+# kagTest() # Use this to run a test data set through the code.
+# kagPreProcess()
+# kagImputeNA()
+kagTrain()
+print(rfModel)
+plot(rfModel)
+confusionMatrix(rfTrainPredict,trainDF[complete.cases(trainDF),]$target)
+varImp(rfModel,scale=T)
+
+# kagValidate()
+# confusionMatrix(rfValidationPredict,validationDF$target)
+# kagSubmit()
 ```
