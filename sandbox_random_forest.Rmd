@@ -6,8 +6,12 @@ output: html_notebook
 # Load all data
     ```{r}
     rm(list=ls())
-    # library(doMC)
-    # registerDoMC(cores=2)
+    
+    cpu <<- 2 # How many cores?
+    cvK <<- 2 # How many K for K-fold cross validation?
+    cvR <<- 2 # How many repeats for cross-validation?
+    impN <<- 1  # How many imputation tries?
+    impIter <<- 1 # how many iterations for PMM imputation?
     
     kagLoad <- function() {
         
@@ -58,11 +62,11 @@ kagPreProcess <- function() {
 # NA Imputation
 ```{r}
 kagImputeNA <- function() {
+    library(doParallel)
+    cl <- makeCluster(cpu) 
+    registerDoParallel(cl)
     
-    # registerDoMC(cores=6)
-        # Imputation Parameters
-    impN <- 3      #should be >1
-    impIter <- 20   #should be >20
+    # Imputation Parameters
     # separate new dummy for each of the existing variables.
     trainNA <- data.table(is.na(trainDF[,-1]))
     colnames(trainNA) <- paste0(colnames(trainNA),"_na")
@@ -73,6 +77,9 @@ kagImputeNA <- function() {
     # In a next phase we impute these with a KNN method. Data is also normalized.
     trainDF <- complete(mice(trainDF, m=impN, maxit = impIter, method = 'pmm'))
     
+    stopCluster(cl)
+    registerDoSEQ()
+    
     save(trainDF,file = "trainImputed.rda")
     trainDF <<- cbind(trainDF,trainNA)
 }
@@ -81,14 +88,16 @@ kagImputeNA <- function() {
 # Model training
 ```{r}
 kagTrain <- function() {
-    # registerDoMC(cores=6)
+    library(doParallel)
+    cl <- makeCluster(cpu) 
+    registerDoParallel(cl) 
     
-    rfMetric = "Accuracy" # focus on accuracy
-    rfMethod = "grid"
+    rfMetric <- "Accuracy" # focus on accuracy
+    rfMethod <- "grid"
     
     # rfTL <- round(sqrt(ncol(trainDF)))
     rfTG <- expand.grid(.mtry=c(1:round(sqrt(ncol(trainDF))))) # Grid Search: Try 1 to (sqrt number of branches) params
-    rfTC <- trainControl(method = "repeatedcv", number = 10, repeats = 3, # Cross-validation, low now.
+    rfTC <- trainControl(method = "repeatedcv", number = cvK, repeats = cvR, # Cross-validation, low now.
                        sampling="down", #  Undersampling
                        verboseIter=F, # No verbose needed
                        search=rfMethod)
@@ -102,6 +111,9 @@ kagTrain <- function() {
                     tuneGrid = rfTG,
                     trControl = rfTC
                     )
+    
+    stopCluster(cl) 
+    registerDoSEQ()
     save(rfModel,file="rfModel.rda")
     
     rfTrainPredict <<- predict(rfModel,trainDF)
@@ -137,6 +149,9 @@ kagValidate <- function() {
     
     validationDF <<- validationDF[,c("ps_car_03_cat","ps_car_05_cat") := NULL]
     
+    cl <- makeCluster(cpu) 
+    registerDoParallel(cl)
+    
     # Imputation
     validationDF <<- complete(mice(validationDF, m=impN, maxit = impIter, method = 'pmm'))
     validationDF <<- cbind(validationDF,validationNA)
@@ -146,6 +161,9 @@ kagValidate <- function() {
     # Prediction
     rfValidationPredict <<- predict(rfModel,validationDF)
     save(rfValidationPredict, file = "validationPredicted.rda")
+    
+    stopCluster(cl); registerDoSEQ();
+    
 }
     
 ```
@@ -165,17 +183,17 @@ kagSubmit <- function() {
 
 Run through the code.
 ```{r}
-library(caret)
+library(caret) # devtools::install_github('topepo/caret/pkg/caret')
 library(data.table)
 library(RANN)
 library(mice)
-
+library(doParallel)
 
 set.seed(03031988)
-# kagLoad()
-# kagTest() # Use this to run a test data set through the code.
-# kagPreProcess()
-# kagImputeNA()
+kagLoad()
+kagTest() # Use this to run a test data set through the code.
+kagPreProcess()
+kagImputeNA()
 kagTrain()
 print(rfModel)
 plot(rfModel)
